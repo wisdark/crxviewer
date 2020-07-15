@@ -10,6 +10,7 @@
            get_extensionID, getPlatformInfo,
            cws_pattern, get_crx_url, is_crx_download_url,
            get_amo_domain, get_amo_slug,
+           get_equivalent_download_url,
            zip,
            EfficientTextWriter,
            beautify,
@@ -1873,12 +1874,6 @@ function getXpis(amodomain, slugorid, page, callback) {
         // When the page parameter is omitted, it defaults to 1.
         page = 1;
     }
-//#if WEB
-    getXpis.fallbackToCORSAnywhere = true;
-//#endif
-    if (getXpis.fallbackToCORSAnywhere) {
-        apiUrl = 'https://cors-anywhere.herokuapp.com/' + apiUrl;
-    }
     var x = new XMLHttpRequest();
     x.open('GET', apiUrl);
     x.onloadend = function() {
@@ -1886,11 +1881,6 @@ function getXpis(amodomain, slugorid, page, callback) {
             getXpis._pendingXhr = null;
         }
 
-        if (!x.status && !getXpis.fallbackToCORSAnywhere) {
-            getXpis.fallbackToCORSAnywhere = true;
-            getXpis(amodomain, slugorid, page, callback);
-            return;
-        }
         if (x.status === 401 || x.status === 403) {
             callback('The results are not publicly available for: ' + slugorid, []);
             return;
@@ -2072,17 +2062,7 @@ function loadNonCrxUrlInViewer(url, human_readable_name, onHasBlob, onHasNoBlob)
     progressDiv.hidden = false;
     progressDiv.textContent = 'Loading ' + human_readable_name;
 
-    var requestUrl = url;
-//#if WEB
-    if (/^https?:/.test(url)) {
-        // Proxy request through CORS Anywhere.
-        requestUrl = 'https://cors-anywhere.herokuapp.com/' + url;
-    }
-//#endif
-//#if OPERA
-    // Opera blocks access to addons.opera.com. Let's bypass this restriction.
-    requestUrl = url.replace(/^https?:\/\/addons\.opera\.com(?=\/)/i, '$&.');
-//#endif
+    var requestUrl = get_equivalent_download_url(url);
     try {
         var x = new XMLHttpRequest();
         x.open('GET', requestUrl);

@@ -8,9 +8,8 @@
    amo_file_version_match_patterns,
    cws_pattern, ows_pattern, amo_pattern, amo_file_version_pattern,
    get_crx_url, get_zip_name, console,
-   URL, document, alert, localStorage */
+    */
 /* globals encodeQueryString */
-/* exported tryTriggerDownload  */
 
 'use strict';
 
@@ -134,24 +133,6 @@ chrome.runtime.onInstalled.addListener(function() {
     }, function(tabs) {
         tabs.forEach(showPageActionIfNeeded);
     });
-    // Migrate from old localStorage settings to chrome.storage
-    var items = {};
-    Object.keys(localStorage).forEach(function(key) {
-        if (key.lastIndexOf('filter-', 0) !== 0) {
-            return;
-        }
-        var value = localStorage.getItem(key);
-        localStorage.removeItem(key);
-        if (value === '1') {
-            items[key] = true;
-        } else if (value === '0') {
-            items[key] = false;
-        }
-    });
-    if (Object.keys(items).length) {
-        var storageArea = chrome.storage.sync;
-        storageArea.set(items);
-    }
 });
 
 function setupDeclarativeWebRequest() {
@@ -247,51 +228,4 @@ function showPageActionIfNeeded(details_or_tab) {
 function isPageActionNeededForUrl(url) {
     return cws_pattern.test(url) || ows_pattern.test(url) || amo_pattern.test(url) ||
         amo_file_version_pattern.test(url);
-}
-
-// Called by popup.js
-function tryTriggerDownload(blob, filename) {
-//#if FIREFOX
-//  // Note: Can't use blob:-URLs with <a download> when out-of-process
-//  // WebExtensions are disabled ( bugzil.la/1423168 )
-//  // so make sure that you the chrome.downloads API stays enabled.
-//#endif
-    tryTriggerDownloadUrl(URL.createObjectURL(blob), filename);
-}
-function tryTriggerDownloadUrl(url, filename) {
-    if (!chrome.downloads) {
-        // Chrome 31+ and Opera 20+
-        tryTriggerDownloadFallback(url, filename);
-        return;
-    }
-    chrome.downloads.download({
-        url: url,
-        filename: filename
-    }, function(downloadId) {
-        if (chrome.runtime.lastError) {
-            alert('An error occurred while trying to save ' + filename + ':\n\n' +
-                chrome.runtime.lastError.message);
-        }
-    });
-}
-function tryTriggerDownloadFallback(url, filename) {
-    function triggerDownload(url, filename) {
-        var a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        (document.body || document.documentElement).appendChild(a);
-        a.click();
-        a.remove();
-    }
-
-    chrome.tabs.executeScript({
-        code: '(' + triggerDownload + ')(' +
-                  JSON.stringify(url) + ',' + JSON.stringify(filename) + ')'
-    }, function(result) {
-        if (chrome.runtime.lastError) {
-            // NOTE: May fail if used in quick succession:
-            triggerDownload(url, filename);
-        }
-        // else when the event page goes away, the URL will be revoked.
-    }); 
 }

@@ -10,6 +10,7 @@
 /* exported get_crx_url, get_webstore_url, get_zip_name, is_crx_url, is_not_crx_url, getParam */
 /* exported is_crx_download_url */
 /* exported get_amo_domain, get_amo_slug */
+/* exported get_equivalent_download_url */
 /* exported encodeQueryString */
 'use strict';
 
@@ -41,6 +42,8 @@ var amo_file_version_match_patterns = [
     '*://addons.allizom.org/*firefox/files/browse/*',
     '*://addons-dev.allizom.org/*firefox/files/browse/*',
 ];
+// Depends on: https://bugzilla.mozilla.org/show_bug.cgi?id=1620084
+var amo_xpi_cdn_pattern = /^https?:\/\/(?:addons\.cdn\.mozilla\.net|addons-dev-cdn\.allizom\.org)\/user-media\/addons\//;
 
 // string extensionID if valid URL
 // null otherwise
@@ -192,6 +195,56 @@ function get_amo_slug(url) {
     if (match) {
         return match[2];
     }
+}
+
+function is_cors_enabled_download_url(url) {
+    if (
+        // We're only interested in XPI files from AMO,
+        // which supports CORS as of March 2020:
+        // https://github.com/mozilla/addons-server/issues/9118
+        // The following matches the whole AMO domain, including non-CORS
+        // endpoints. That's fine since we only care about XPI URLs.
+        amo_domain_pattern.test(url) ||
+        // The full redirect chain should also allow CORS, including the CDN:
+        // https://bugzilla.mozilla.org/show_bug.cgi?id=1620084
+        amo_xpi_cdn_pattern.test(url)
+    ) {
+        return true;
+    }
+    return false;
+}
+
+// Some environments enforce restrictions on the URLs that can be accessed.
+// This function rewrites the input URL to one that should serve exactly the
+// same result as the requested URL, sans restrictions.
+function get_equivalent_download_url(url) {
+    var requestUrl = url;
+//#if WEB
+    if (/^https?:/.test(url) && !is_cors_enabled_download_url(url)) {
+        // Proxy request through CORS Anywhere.
+        requestUrl = 'https://cors-anywhere.herokuapp.com/' + url;
+    }
+//#endif
+//#if OPERA
+    // Opera blocks access to addons.opera.com. Let's bypass this restriction.
+    requestUrl = url.replace(/^https?:\/\/addons\.opera\.com(?=\/)/i, '$&.');
+//#endif
+//#if CHROME
+    // Brave intercepts requests to the CWS update endpoint, and prevents us
+    // from reading the source file, as explained at
+    // https://github.com/Rob--W/crxviewer/issues/91#issuecomment-629854450
+    //
+    // Work around this by changing the URL to something that does not match
+    // https://github.com/brave/brave-core/blob/f453ab2a5e8425afea9bd980fb688d8fec137f53/browser/net/brave_common_static_redirect_network_delegate_helper.cc#L40
+    if (url.startsWith('https://clients2.google.com/service/update2')) {
+        // There are multiple ways to bypass the check. Replacing the host is
+        // one of them, but we don't do that because manifest.json does not
+        // include permissions for access to other subdomains of google.com.
+        // Prepending another slash works, so let's use it.
+        requestUrl = url.replace('.com/', '.com//');
+    }
+//#endif
+    return requestUrl;
 }
 
 function is_crx_url(url) {
