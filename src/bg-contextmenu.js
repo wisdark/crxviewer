@@ -5,7 +5,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* jshint browser:true, devel:true */
-/* globals chrome, cws_match_pattern, ows_match_pattern, amo_match_patterns, amo_file_version_match_patterns, get_crx_url */
+/* globals chrome, cws_match_pattern, mea_match_pattern, ows_match_pattern, amo_match_patterns, get_crx_url */
 /* globals encodeQueryString */
 
 'use strict';
@@ -14,9 +14,6 @@
     var MENU_ID_PAGE = 'nl.robwu.contextmenu.crxpage';
     var MENU_ID_AMO_APPROVED_LINK = 'nl.robwu.contextmenu.amoapprovedlink';
     var MENU_ID_AMO_APPROVED_PAGE = 'nl.robwu.contextmenu.amoapprovedpage';
-//#if FIREFOX
-    var MENU_ID_PAGE_ACTION = 'nl.robwu.contextmenu.pageaction';
-//#endif
     var MENU_ID_ACTION_MENU = 'nl.robwu.contextmenu.actionmenu.';
     var MENU_ID_ACTION_MENU_POPUP = MENU_ID_ACTION_MENU + 'popup';
     var MENU_ID_ACTION_MENU_VIEW_SOURCE = MENU_ID_ACTION_MENU + 'view-source';
@@ -30,8 +27,9 @@
         '*://*/*.XPI*',
         '*://*/*.xpi*',
         cws_match_pattern,
+        mea_match_pattern,
         ows_match_pattern,
-    ].concat(amo_file_version_match_patterns);
+    ];
 
     chrome.storage.onChanged.addListener(function(changes) {
         if (changes.actionClickAction) {
@@ -77,13 +75,6 @@
             }
             setActionClickAction(items.actionClickAction);
         });
-//#if FIREFOX
-        chrome.contextMenus.create({
-            id: MENU_ID_PAGE_ACTION,
-            title: 'Hide this button',
-            contexts: ['page_action'],
-        });
-//#endif
         chrome.contextMenus.create({
             id: MENU_ID_ACTION_MENU,
             title: 'Primary action on click',
@@ -122,14 +113,6 @@
     }
     
     function contextMenusOnClicked(info, tab) {
-//#if FIREFOX
-        if (info.menuItemId === MENU_ID_PAGE_ACTION) {
-            // background.js will now pick up the storage change
-            // and disable page actions.
-            chrome.storage.sync.set({showPageAction: false});
-            return;
-        }
-//#endif
         if (info.menuItemId.startsWith(MENU_ID_ACTION_MENU)) {
             var choice = info.menuItemId.slice(MENU_ID_ACTION_MENU.length);
             chrome.storage.sync.set({actionClickAction: choice});
@@ -180,8 +163,9 @@
             contexts: ['all'],
             documentUrlPatterns: [
                 cws_match_pattern,
+                mea_match_pattern,
                 ows_match_pattern,
-            ].concat(amo_file_version_match_patterns),
+            ],
         });
         // AMO lists multiple versions, specifically state that this
         // is the latest approved version to avoid ambiguity.

@@ -5,10 +5,11 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* globals location, getPlatformInfo, navigator */
-/* exported cws_match_pattern, ows_match_pattern, amo_match_patterns, amo_file_version_match_patterns */
-/* exported cws_pattern, ows_pattern, amo_pattern, amo_file_version_pattern */
-/* exported get_crx_url, get_webstore_url, get_zip_name, is_crx_url, is_not_crx_url, getParam */
-/* exported is_crx_download_url */
+/* exported cws_match_pattern, mea_match_pattern, ows_match_pattern, amo_match_patterns */
+/* exported cws_pattern, mea_pattern, ows_pattern, amo_pattern */
+/* exported can_viewsource_crx_url */
+/* exported get_crx_url, get_webstore_url, get_zip_name, is_not_crx_url, getParam */
+/* exported is_crx_download_url, is_webstore_url */
 /* exported get_amo_domain, get_amo_slug */
 /* exported get_equivalent_download_url */
 /* exported encodeQueryString */
@@ -20,27 +21,28 @@ var cws_download_pattern = /^https?:\/\/clients2\.google\.com\/service\/update2\
 // match pattern per Chrome spec
 var cws_match_pattern = '*://chrome.google.com/webstore/detail/*';
 
+// Microsoft Edge Addons Store
+var mea_pattern = /^https?:\/\/microsoftedge.microsoft.com\/addons\/.+?\/([a-z]{32})(?=[\/#?]|$)/;
+var mea_download_pattern = /^https?:\/\/edge\.microsoft\.com\/extensionwebstorebase\/v1\/crx\b.*?%3D([a-z]{32})%26/;
+var mea_match_pattern = '*://microsoftedge.microsoft.com/addons/detail/*';
+
 // Opera add-on gallery
 var ows_pattern = /^https?:\/\/addons.opera.com\/.*?extensions\/(?:details|download)\/([^\/?#]+)/i;
+// The gallery links to addons.opera.com/extensions/download and redirects to addons-extensions.operacdn.com.
+var ows_download_pattern = /^https?:\/\/addons.opera.com\/extensions\/download\/([^\/]+)/;
 var ows_match_pattern = '*://addons.opera.com/*extensions/details/*';
 
 // Firefox addon gallery
-var amo_pattern = /^https?:\/\/(addons\.mozilla\.org|addons(?:-dev)?\.allizom\.org)\/.*?(?:addon|review)\/([^/<>"'?#]+)/;
+var amo_pattern = /^https?:\/\/(reviewers\.)?(addons\.mozilla\.org|addons(?:-dev)?\.allizom\.org)\/.*?(?:addon|review)\/([^/<>"'?#]+)/;
 var amo_download_pattern = /^https?:\/\/(addons\.mozilla\.org|addons(?:-dev)?\.allizom\.org)\/[^?#]*\/downloads\/latest\/([^/?#]+)/;
 var amo_domain_pattern = /^https?:\/\/(addons\.mozilla\.org|addons(?:-dev)?\.allizom\.org)\//;
-var amo_file_version_pattern = /^https?:\/\/(addons\.mozilla\.org|addons(?:-dev)?\.allizom\.org)\/(?:[^?#\/]*\/)?firefox\/files\/browse\/(\d+)(\/[^?#\/]+\.xpi)?/;
 var amo_match_patterns = [
     '*://addons.mozilla.org/*addon/*',
-    '*://addons.mozilla.org/*review/*',
+    '*://*.addons.mozilla.org/*review/*',
     '*://addons.allizom.org/*addon/*',
-    '*://addons.allizom.org/*review/*',
+    '*://*.addons.allizom.org/*review/*',
     '*://addons-dev.allizom.org/*addon/*',
-    '*://addons-dev.allizom.org/*review/*',
-];
-var amo_file_version_match_patterns = [
-    '*://addons.mozilla.org/*firefox/files/browse/*',
-    '*://addons.allizom.org/*firefox/files/browse/*',
-    '*://addons-dev.allizom.org/*firefox/files/browse/*',
+    '*://*.addons-dev.allizom.org/*review/*',
 ];
 // Depends on: https://bugzilla.mozilla.org/show_bug.cgi?id=1620084
 var amo_xpi_cdn_pattern = /^https?:\/\/(?:addons\.cdn\.mozilla\.net|addons-dev-cdn\.allizom\.org)\/user-media\/addons\//;
@@ -83,7 +85,8 @@ function get_xpi_url(amoDomain, addonSlug) {
 }
 
 // Returns location of CRX file for a given extensionID or CWS url or Opera add-on URL
-// or Firefox addon URL.
+// or Firefox addon URL or Microsoft Edge addon URL.
+// Unrecognized values are returned as-is.
 function get_crx_url(extensionID_or_url) {
     var url;
     var match = ows_pattern.exec(extensionID_or_url);
@@ -97,9 +100,9 @@ function get_crx_url(extensionID_or_url) {
     if (match) {
         return get_xpi_url(match[1], match[2]);
     }
-    match = amo_file_version_pattern.exec(extensionID_or_url);
+    match = mea_pattern.exec(extensionID_or_url) || mea_download_pattern.exec(extensionID_or_url);
     if (match) {
-        return 'https://' + match[1] + '/firefox/downloads/file/' + match[2] + (match[3] || '/addon.xpi');
+        return 'https://edge.microsoft.com/extensionwebstorebase/v1/crx?response=redirect&x=id%3D' + match[1] + '%26installsource%3Dondemand%26uc';
     }
     // Chrome Web Store
     match = get_extensionID(extensionID_or_url);
@@ -155,11 +158,16 @@ function isChromeNotChromium() {
 
 // Get location of addon gallery for a given extension
 function get_webstore_url(url) {
+    // Keep logic in sync with is_webstore_url.
     var cws = cws_pattern.exec(url) || cws_download_pattern.exec(url);
     if (cws) {
         return 'https://chrome.google.com/webstore/detail/' + cws[1];
     }
-    var ows = ows_pattern.exec(url);
+    var mea = mea_pattern.exec(url) || mea_download_pattern.exec(url);
+    if (mea) {
+        return 'https://microsoftedge.microsoft.com/addons/detail/' + mea[1];
+    }
+    var ows = ows_pattern.exec(url) || ows_download_pattern.exec(url);
     if (ows) {
         return 'https://addons.opera.com/extensions/details/' + ows[1];
     }
@@ -173,6 +181,10 @@ function get_webstore_url(url) {
 function get_zip_name(url, /*optional*/filename) {
     if (!filename) {
         var extensionID = get_extensionID(url);
+        if (!extensionID) {
+            extensionID = mea_pattern.exec(url) || mea_download_pattern.exec(url);
+            extensionID = extensionID && extensionID[1];
+        }
         if (extensionID) {
             filename = extensionID;
         } else {
@@ -247,22 +259,46 @@ function get_equivalent_download_url(url) {
     return requestUrl;
 }
 
-function is_crx_url(url) {
-    return cws_pattern.test(url) || ows_pattern.test(url) || /\.(crx|nex)\b/.test(url);
+// Whether the URL is supported by crxviewer (used in the popup).
+function can_viewsource_crx_url(url) {
+    return is_crx_download_url(url) || is_webstore_url(url);
 }
 
 // Whether the given URL is not a CRX file, with certainty.
+// Used to determine whether a file should pass through openCRXasZip (of lib/crx-to-zip.js).
 function is_not_crx_url(url) {
-    if (is_crx_url(url) || cws_download_pattern.test(url))
+    // Chromium-based browsers use CRX with certainty.
+    if (
+        cws_pattern.test(url) || cws_download_pattern.test(url) ||
+        mea_pattern.test(url) || mea_download_pattern.test(url) ||
+        ows_pattern.test(url) || ows_download_pattern.test(url) ||
+        /\.(crx|nex)\b/.test(url)
+    ) {
         return false;
-    return amo_pattern.test(url) ||
-        amo_download_pattern.test(url) ||
-        amo_file_version_pattern.test(url) ||
-        /\.xpi([#?]|$)/.test(url);
+    }
+    // Firefox-based browsers use XPI, which is not a CRX with certainty.
+    if (
+        amo_pattern.test(url) || amo_domain_pattern.test(url) ||
+        /\.xpi([#?]|$)/.test(url)
+    ) {
+        return true;
+    }
+    // Unsure: maybe CRX, maybe not.
+    return false;
 }
 
+// Whether the given URL is from a URL that is expected to serve the extension file.
 function is_crx_download_url(url) {
-    return cws_download_pattern.test(url) || amo_download_pattern.test(url);
+    return cws_download_pattern.test(url) ||
+        mea_download_pattern.test(url) ||
+        ows_download_pattern.test(url) ||
+        amo_download_pattern.test(url) ||
+        /\.(crx|nex|xpi)\b/.test(url);
+}
+
+function is_webstore_url(url) {
+    // Keep logic in sync with get_webstore_url.
+    return cws_pattern.test(url) || mea_pattern.test(url) || ows_pattern.test(url) || amo_pattern.test(url);
 }
 
 // |name| should not contain special RegExp characters, except possibly maybe a '[]' at the end.

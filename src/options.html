@@ -37,14 +37,6 @@ footer {
 </style>
 </head>
 <body>
-<!--#if CHROME-->
-<label>
-    <input type="checkbox" id="hasAccessToAllURLs">
-    Allow access to all URLs.<br>
-    This option allows the extension to detect Chrome and Opera extensions outside the Chrome Web store.
-    This option is also required for viewing the source code of Firefox addons.
-</label>
-<!--#endif-->
 <label>
     <input type="checkbox" id="contextmenu">
     Add a "View linked extension source" context menu item to Chrome extension and Firefox addon links.
@@ -55,12 +47,6 @@ footer {
     <textarea id="contextmenuPatterns"></textarea>
     <span id="contextmenuPatternsOutput"></span>
 </label>
-<!--#if FIREFOX-->
-<label id="pageaction-wrapper">
-    <input type="checkbox" id="pageaction">
-    Show a page action button in the location bar of extension installation pages.
-</label>
-<!--#endif-->
 <label>
     <a href="crxviewer.html">Open Viewer</a> - select a CRX / NEX / XPI / ZIP file to view its contents.
 </label>
