@@ -2,7 +2,7 @@
     "name": "Chrome extension source viewer",
     "short_name": "CRX Viewer",
     "description": "View source code of Chrome extensions, Firefox addons or Opera extensions (crx/nex/xpi) from the Chrome web store and elsewhere.",
-    "version": "1.6.11",
+    "version": "1.6.13",
     "manifest_version": 2,
     "background": {
         "scripts": [
@@ -35,10 +35,10 @@
     },
     "permissions": [
         "tabs",
-        "webNavigation",
         "storage",
         "contextMenus",
         "downloads",
+        "declarativeContent",
         "*://clients2.google.com/service/update2/crx*",
         "*://clients2.googleusercontent.com/crx/download/*"
     ],

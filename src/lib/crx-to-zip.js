@@ -60,6 +60,29 @@ var CRXtoZIP = (function() {
             publicKeyBase64 = getPublicKeyFromProtoBuf(view, 12, zipStartOffset);
         }
 
+        // addons.opera.com creates CRX3 files by prepending the CRX3 header to the CRX2 data.
+        if (
+            // CRX3
+            view[4] === 3 &&
+            // 43 72 32 34 - Cr24 = CRX magic
+            view[zipStartOffset + 0] === 67 &&
+            view[zipStartOffset + 1] === 114 &&
+            view[zipStartOffset + 2] === 50 &&
+            view[zipStartOffset + 3] === 52
+        ) {
+            console.warn('Nested CRX: Expected zip data, but found another CRX file instead.');
+            return CRXtoZIP(
+                arraybuffer.slice(zipStartOffset),
+                function(zipFragment, nestedKey) {
+                    if (publicKeyBase64 != nestedKey) {
+                        console.warn('Nested CRX: pubkey mismatch; found ' + nestedKey);
+                    }
+                    callback(zipFragment, publicKeyBase64, arraybuffer);
+                },
+                errCallback
+            );
+        }
+
         // Create a new view for the existing buffer, and wrap it in a Blob object.
         var zipFragment = new Blob([
             new Uint8Array(arraybuffer, zipStartOffset)
@@ -234,6 +257,12 @@ function openCRXasZip_url(url, callback, errCallback, xhrProgressListener) {
     var requestUrl = get_equivalent_download_url(url);
     var x = new XMLHttpRequest();
     x.open('GET', requestUrl);
+//#if OPERA
+    // Required for access to addons.opera.com, see get_equivalent_download_url
+    if (requestUrl.startsWith('https://cors-anywhere.herokuapp.com/')) {
+        x.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+    }
+//#endif
     x.responseType = 'arraybuffer';
     x.onprogress = xhrProgressListener;
     x.onload = function() {

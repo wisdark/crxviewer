@@ -77,8 +77,16 @@ function build(setup, output_root_dir) {
     cleanDirectory(output_root_dir);
     builder.build(setup);
     exec(ROOT_DIR + '/node_modules/.bin/lessc --strict-math=on "' + SRC_DIR + 'crxviewer.less" "' + output_root_dir + 'crxviewer.css"');
-    cd(output_root_dir);
-    rm('lib/beautify/jsbeautifier/get-jsb.sh');
+}
+
+function removeFirefoxSpecificFiles() {
+    rm('domain-fronter.js');
+}
+function removeTestFiles() {
+    rm('lib/prettify/test-prism-language-detect.js');
+    rm('lib/prettify/test-prism-li-lines.js');
+    rm('lib/prettify/test-prism-source-extensions.html');
+    rm('test-asn1.html');
 }
 
 function lintDir(dest_dir) {
@@ -134,6 +142,8 @@ target.chrome = function() {
     build(setup, CHROME_BUILD_DIR);
 
     cd(CHROME_BUILD_DIR);
+    removeFirefoxSpecificFiles();
+    removeTestFiles();
     rm('-f', '../crxviewer.zip');
     exec('7z a ../crxviewer.zip * -tzip');
     lintDir(CHROME_BUILD_DIR);
@@ -152,6 +162,8 @@ target.opera = function() {
     cp(SRC_DIR + 'manifest_opera.json', OPERA_BUILD_DIR + 'manifest.json');
 
     cd(OPERA_BUILD_DIR);
+    removeFirefoxSpecificFiles();
+    removeTestFiles();
     rm('-f', '../crxviewer_opera.zip');
     exec('7z a ../crxviewer_opera.zip * -tzip');
     lintDir(OPERA_BUILD_DIR);
@@ -170,6 +182,7 @@ target.firefox = function() {
     cp(SRC_DIR + 'manifest_firefox.json', FIREFOX_BUILD_DIR + 'manifest.json');
 
     cd(FIREFOX_BUILD_DIR);
+    removeTestFiles();
     // Split incognito is not supported in Firefox.
     rm('incognito-events.js');
     rm('-f', '../crxviewer_firefox.zip');

@@ -5,8 +5,8 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* globals location, getPlatformInfo, navigator */
-/* exported cws_match_pattern, mea_match_pattern, ows_match_pattern, amo_match_patterns */
-/* exported cws_pattern, mea_pattern, ows_pattern, amo_pattern */
+/* exported cws_match_pattern, mea_match_pattern, ows_match_pattern, amo_match_patterns, atn_match_patterns */
+/* exported cws_pattern, mea_pattern, ows_pattern, amo_pattern, atn_pattern */
 /* exported can_viewsource_crx_url */
 /* exported get_crx_url, get_webstore_url, get_zip_name, is_not_crx_url, getParam */
 /* exported is_crx_download_url, is_webstore_url */
@@ -33,7 +33,7 @@ var ows_download_pattern = /^https?:\/\/addons.opera.com\/extensions\/download\/
 var ows_match_pattern = '*://addons.opera.com/*extensions/details/*';
 
 // Firefox addon gallery
-var amo_pattern = /^https?:\/\/(reviewers\.)?(addons\.mozilla\.org|addons(?:-dev)?\.allizom\.org)\/.*?(?:addon|review)\/([^/<>"'?#]+)/;
+var amo_pattern = /^https?:\/\/((?:reviewers\.)?(?:addons\.mozilla\.org|addons(?:-dev)?\.allizom\.org))\/.*?(?:addon|review)\/([^/<>"'?#]+)/;
 var amo_download_pattern = /^https?:\/\/(addons\.mozilla\.org|addons(?:-dev)?\.allizom\.org)\/[^?#]*\/downloads\/latest\/([^/?#]+)/;
 var amo_domain_pattern = /^https?:\/\/(addons\.mozilla\.org|addons(?:-dev)?\.allizom\.org)\//;
 var amo_match_patterns = [
@@ -46,6 +46,22 @@ var amo_match_patterns = [
 ];
 // Depends on: https://bugzilla.mozilla.org/show_bug.cgi?id=1620084
 var amo_xpi_cdn_pattern = /^https?:\/\/(?:addons\.cdn\.mozilla\.net|addons-dev-cdn\.allizom\.org)\/user-media\/addons\//;
+
+// Thunderbird
+var atn_pattern = /^https?:\/\/((?:addons|addons-stage)\.thunderbird\.net)\/.*?\/addon\/([^/?#]+)/;
+var atn_download_pattern = /^https?:\/\/((?:addons|addons-stage)\.thunderbird\.net)\/[^?#]*\/downloads\/latest\/([^/?#]+)/;
+var atn_match_patterns = [
+    '*://addons.thunderbird.net/*addon/*',
+    '*://addons-stage.thunderbird.net/*addon/*',
+];
+
+// page_action.show_matches (in manifest_firefox.json) uses:
+// cws_match_pattern, mea_match_pattern, ows_match_pattern, amo_match_patterns
+//
+// declarativeContent (in background.js) uses the same patterns, translated to a UrlFilter.
+//
+// popup.js uses can_viewsource_crx_url to determine whether the URL can actually be opened,
+// which use regexps that may be stricter than the match patterns.
 
 // string extensionID if valid URL
 // null otherwise
@@ -99,6 +115,11 @@ function get_crx_url(extensionID_or_url) {
     match = amo_pattern.exec(extensionID_or_url);
     if (match) {
         return get_xpi_url(match[1], match[2]);
+    }
+    match = atn_pattern.exec(extensionID_or_url);
+    if (match) {
+        // Although /firefox/ works too, let's prefer /thunderbird/.
+        return get_xpi_url(match[1], match[2]).replace('/firefox/', '/thunderbird/');
     }
     match = mea_pattern.exec(extensionID_or_url) || mea_download_pattern.exec(extensionID_or_url);
     if (match) {
@@ -175,6 +196,10 @@ function get_webstore_url(url) {
     if (amo) {
         return 'https://' + get_amo_domain(url) + '/firefox/addon/' + amo;
     }
+    var atn = atn_pattern.exec(url) || atn_download_pattern.exec(url);
+    if (atn) {
+        return 'https://' + atn[1] + '/thunderbird/addon/' + atn[2];
+    }
 }
 
 // Return the suggested name of the zip file.
@@ -239,21 +264,15 @@ function get_equivalent_download_url(url) {
 //#endif
 //#if OPERA
     // Opera blocks access to addons.opera.com. Let's bypass this restriction.
-    requestUrl = url.replace(/^https?:\/\/addons\.opera\.com(?=\/)/i, '$&.');
-//#endif
-//#if CHROME
-    // Brave intercepts requests to the CWS update endpoint, and prevents us
-    // from reading the source file, as explained at
-    // https://github.com/Rob--W/crxviewer/issues/91#issuecomment-629854450
-    //
-    // Work around this by changing the URL to something that does not match
-    // https://github.com/brave/brave-core/blob/f453ab2a5e8425afea9bd980fb688d8fec137f53/browser/net/brave_common_static_redirect_network_delegate_helper.cc#L40
-    if (url.startsWith('https://clients2.google.com/service/update2')) {
-        // There are multiple ways to bypass the check. Replacing the host is
-        // one of them, but we don't do that because manifest.json does not
-        // include permissions for access to other subdomains of google.com.
-        // Prepending another slash works, so let's use it.
-        requestUrl = url.replace('.com/', '.com//');
+    // Unfortunately, there is no way to retrieve the .crx file in an ordinary way.
+    // If given the extension ID, it is possible to fetch
+    // "https://extension-updates.opera.com/api/omaha/update/?[see get_crx_url for params]"
+    // but using the following x param instead:
+    // "&x=id%3D[extensionID]%26v%3D[old version, e.g. 0]%26installedby%3Dinternal"
+    // and then download the crx from https://addons-extensions.operacdn.com/media/direct/*/*/*.crx
+    // ... but we are given the slug of the store listing, not the extension ID, so we cannot use this.
+    if (ows_download_pattern.test(url)) {
+        requestUrl = 'https://cors-anywhere.herokuapp.com/' + url;
     }
 //#endif
     return requestUrl;
@@ -279,6 +298,7 @@ function is_not_crx_url(url) {
     // Firefox-based browsers use XPI, which is not a CRX with certainty.
     if (
         amo_pattern.test(url) || amo_domain_pattern.test(url) ||
+        atn_pattern.test(url) || atn_download_pattern.test(url) ||
         /\.xpi([#?]|$)/.test(url)
     ) {
         return true;
@@ -293,12 +313,17 @@ function is_crx_download_url(url) {
         mea_download_pattern.test(url) ||
         ows_download_pattern.test(url) ||
         amo_download_pattern.test(url) ||
+        atn_download_pattern.test(url) ||
         /\.(crx|nex|xpi)\b/.test(url);
 }
 
 function is_webstore_url(url) {
     // Keep logic in sync with get_webstore_url.
-    return cws_pattern.test(url) || mea_pattern.test(url) || ows_pattern.test(url) || amo_pattern.test(url);
+    return cws_pattern.test(url) ||
+        mea_pattern.test(url) ||
+        ows_pattern.test(url) ||
+        amo_pattern.test(url) ||
+        atn_pattern.test(url);
 }
 
 // |name| should not contain special RegExp characters, except possibly maybe a '[]' at the end.
