@@ -5,7 +5,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* globals location, getPlatformInfo, navigator */
-/* exported cws_match_pattern, mea_match_pattern, ows_match_pattern, amo_match_patterns, atn_match_patterns */
+/* exported cws_match_patterns, mea_match_pattern, ows_match_pattern, amo_match_patterns, atn_match_patterns */
 /* exported cws_pattern, mea_pattern, ows_pattern, amo_pattern, atn_pattern */
 /* exported can_viewsource_crx_url */
 /* exported get_crx_url, get_webstore_url, get_zip_name, is_not_crx_url, getParam */
@@ -16,10 +16,13 @@
 'use strict';
 
 // cws_pattern[1] = extensionID
-var cws_pattern = /^https?:\/\/chrome.google.com\/webstore\/.+?\/([a-z]{32})(?=[\/#?]|$)/;
+var cws_pattern = /^https?:\/\/(?:chrome.google.com\/webstore|chromewebstore.google.com)\/.+?\/([a-z]{32})(?=[\/#?]|$)/;
 var cws_download_pattern = /^https?:\/\/clients2\.google\.com\/service\/update2\/crx\b.*?%3D([a-z]{32})%26uc/;
 // match pattern per Chrome spec
-var cws_match_pattern = '*://chrome.google.com/webstore/detail/*';
+var cws_match_patterns = [
+    '*://chrome.google.com/webstore/detail/*',
+    '*://chromewebstore.google.com/detail/*',
+];
 
 // Microsoft Edge Addons Store
 var mea_pattern = /^https?:\/\/microsoftedge.microsoft.com\/addons\/.+?\/([a-z]{32})(?=[\/#?]|$)/;
@@ -56,7 +59,7 @@ var atn_match_patterns = [
 ];
 
 // page_action.show_matches (in manifest_firefox.json) uses:
-// cws_match_pattern, mea_match_pattern, ows_match_pattern, amo_match_patterns
+// cws_match_patterns, mea_match_pattern, ows_match_pattern, amo_match_patterns
 //
 // declarativeContent (in background.js) uses the same patterns, translated to a UrlFilter.
 //
@@ -103,6 +106,8 @@ function get_xpi_url(amoDomain, addonSlug) {
 // Returns location of CRX file for a given extensionID or CWS url or Opera add-on URL
 // or Firefox addon URL or Microsoft Edge addon URL.
 // Unrecognized values are returned as-is.
+// If the input is potentially a CWS URL, ensure that getPlatformInfoAsync() has been called before,
+// which results in a CRX URL with richer version information.
 function get_crx_url(extensionID_or_url) {
     var url;
     var match = ows_pattern.exec(extensionID_or_url);
@@ -133,6 +138,7 @@ function get_crx_url(extensionID_or_url) {
         return extensionID_or_url;
     }
 
+    // Note: To avoid the fallback, ensure that getPlatformInfoAsync() has been called before.
     var platformInfo = getPlatformInfo();
 
     // Omitting this value is allowed, but add it just in case.
@@ -182,7 +188,7 @@ function get_webstore_url(url) {
     // Keep logic in sync with is_webstore_url.
     var cws = cws_pattern.exec(url) || cws_download_pattern.exec(url);
     if (cws) {
-        return 'https://chrome.google.com/webstore/detail/' + cws[1];
+        return 'https://chromewebstore.google.com/detail/' + cws[1];
     }
     var mea = mea_pattern.exec(url) || mea_download_pattern.exec(url);
     if (mea) {

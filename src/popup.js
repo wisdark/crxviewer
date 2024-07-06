@@ -7,6 +7,7 @@
 /* jshint browser:true, devel:true */
 /* globals chrome, get_crx_url, get_zip_name, can_viewsource_crx_url, openCRXasZip */
 /* globals encodeQueryString */
+/* globals getPlatformInfoAsync */
 'use strict';
 var cws_url;
 var crx_url;
@@ -20,16 +21,27 @@ initialize();
 function initialize() {
     var storageIsReady = false;
 
+    getPlatformInfoAsync(function() {
+        // Hack: although not guaranteed by the API, the getPlatformInfoAsync
+        // call resolves ealier than the later tabs.query call, in practice.
+        console.assert(!crx_url, 'getPlatformInfoAsync() should run first');
+    });
+
     // Get CWS URL. On failure, close the popup
     chrome.tabs.query({
         active: true,
         currentWindow: true
     }, function(tabs) {
         cws_url = tabs[0].url;
+        // Note: Assuming getPlatformInfoAsync() to have resolved first.
         crx_url = get_crx_url(cws_url);
         filename = get_zip_name(crx_url);
         if (!can_viewsource_crx_url(crx_url)) {
+//#if FIREFOX
             chrome.pageAction.hide(tabs[0].id);
+//#else
+            chrome.action.disable(tabs[0].id);
+//#endif
             window.close();
             return;
         }
@@ -90,10 +102,13 @@ function doViewSource() {
         lastFocusedWindow: true,
     }, function(tabs) {
         chrome.tabs.create({
-            url: chrome.extension.getURL('crxviewer.html') +
+            url: chrome.runtime.getURL('crxviewer.html') +
                 '?' + encodeQueryString({crx: crx_url, zipname: filename}),
             active: true,
             index: tabs && tabs.length ? tabs[0].index + 1 : undefined,
+//#if FIREFOX
+            cookieStoreId: tabs && tabs[0] && tabs[0].cookieStoreId,
+//#endif
         }, function() {
             window.close();
         });
