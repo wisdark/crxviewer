@@ -146,15 +146,19 @@ function get_crx_url(extensionID_or_url) {
     var product_id = isChromeNotChromium() ? 'chromecrx' : 'chromiumcrx';
     // Channel is "unknown" on Chromium on ArchLinux, so using "unknown" will probably be fine for everyone.
     var product_channel = 'unknown';
-    // As of July, the Chrome Web Store sends 204 responses to user agents when their
+    // As of July 2014, the Chrome Web Store sends 204 responses to user agents when their
     // Chrome/Chromium version is older than version 31.0.1609.0
+    // As of December 2024, the CWS sends 204 responses to Chrome <88.
     var product_version = '9999.0.9999.0';
     // Try to detect the Chrome version, and if it is lower than 31.0.1609.0, use a very high version.
     // $1 = m.0.r.p  // major.minor.revision.patch where minor is always 0 for some reason.
     // $2 = m
     // $3 =     r
+    // NOTE: r is always 0 since Chrome 101 due to the User-Agent String Reduction efforts,
+    // per https://www.chromium.org/updates/ua-reduction/
+    // and https://blog.chromium.org/2021/05/update-on-user-agent-string-reduction.html
     var cr_version = /Chrome\/((\d+)\.0\.(\d+)\.\d+)/.exec(navigator.userAgent);
-    if (cr_version && +cr_version[2] >= 31 && +cr_version[3] >= 1609) {
+    if (cr_version && +cr_version[2] >= 88) {
         product_version = cr_version[1];
     }
 
